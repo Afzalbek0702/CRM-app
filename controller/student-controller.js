@@ -1,0 +1,154 @@
+import pool from "../lib/db.js";
+
+class Student_Controller {
+	async getAllStudents(req, res) {
+		try {
+			const { rows } = await pool.query("SELECT * FROM students");
+			res.json(rows);
+		} catch (error) {
+			res
+				.status(500)
+				.json({ msg: "O'quvchilarni olishda xatolik yuz berdi", error });
+		}
+	}
+	async getSingleStudents(req, res) {
+		if (!req.params.id) {
+			return res.status(400).json({ error: "ID kerak" });
+		}
+		try {
+			const { rows } = await pool.query(
+				"SELECT * FROM students WHERE id = $1;",
+				[req.params.id],
+			);
+			res.json(rows[0]);
+		} catch (error) {
+			res
+				.status(500)
+				.json({ msg: "O'quvchini olishda xatolik yuz berdi", error });
+		}
+	}
+	async postStudent(req, res) {
+		const { full_name, phone, birthday, parents_name } = req.body;
+		if (!full_name || !phone || !birthday || !parents_name) {
+			return res
+				.status(400)
+				.json({ error: "full_name, phone, birthday va parents_name kerak" });
+		}
+		try {
+			const { rows } = await pool.query(
+				"INSERT INTO students (full_name, phone, birthday, parents_name) VALUES ($1, $2, $3, $4) RETURNING *",
+				[full_name, phone, birthday, parents_name],
+			);
+			res.json(rows[0]);
+		} catch (error) {
+			res
+				.status(500)
+				.json({ msg: "O'quvchini qo'shishda xatolik yuz berdi", error });
+		}
+	}
+	async updateStudent(req, res) {
+		if (!req.params.id) {
+			return res.status(400).json({ error: "ID kerak" });
+		}
+		const { full_name, phone, birthday, parents_name } = req.body;
+		if (!full_name || !phone || !birthday || !parents_name) {
+			return res
+				.status(400)
+				.json({ error: "full_name, phone, birthday va parents_name kerak" });
+		}
+		try {
+			const { rows } = await pool.query(
+				"UPDATE students SET full_name = $1, phone = $2, birthday = $3, parents_name = $4 WHERE id = $5 RETURNING *",
+				[full_name, phone, birthday, parents_name, req.params.id],
+			);
+			res.json(rows[0]);
+		} catch (error) {
+			res
+				.status(500)
+				.json({ msg: "O'quvchini yangilashda xatolik yuz berdi", error });
+		}
+	}
+	async updateStudentStatus(req, res) {
+		const { status } = req.body;
+		if (!req.params.id || !status) {
+			return res.status(400).json({ error: "ID va status kerak" });
+		}
+
+		const allowed = ["active", "frozen", "finished", "debtor"];
+		if (!allowed.includes(status)) {
+			return res.status(400).json({ message: "Noto‘g‘ri status" });
+		}
+		try {
+			await pool.query("UPDATE students SET status = $1 WHERE id = $2", [
+				status,
+				req.params.id,
+			]);
+
+			res.json({ message: "Status yangilandi" });
+		} catch (error) {
+			res
+				.status(500)
+				.json({ msg: "O'quvchini yangilashda xatolik yuz berdi", error });
+		}
+	}
+	async deleteStudent(req, res) {
+		if (!req.params.id) {
+			return res.status(400).json({ error: "ID kerak" });
+		}
+		try {
+			const { rows } = await pool.query(
+				"DELETE FROM students WHERE id = $1 RETURNING *",
+				[req.params.id],
+			);
+			res.json(rows[0]);
+		} catch (error) {
+			res
+				.status(500)
+				.json({ msg: "O'quvchini o'chirishda xatolik yuz berdi", error });
+		}
+	}
+	async getStudentProfile(req, res) {
+		const { id } = req.params;
+
+		const studentSql = `SELECT
+      s.id,
+      s.full_name,
+      s.phone,
+      s.status,
+      COALESCE(SUM(g.price),0) - COALESCE(SUM(p.amount),0) AS balance
+      FROM students s
+      LEFT JOIN enrollments e ON e.student_id = s.id
+      LEFT JOIN groups g ON g.id = e.group_id
+      LEFT JOIN payments p ON p.student_id = s.id
+      WHERE s.id = $1
+      GROUP BY s.id;`;
+		const attendanceSql = `SELECT
+      a.lesson_date,
+      a.status,
+      g.name AS group_name
+      FROM attendance a
+      JOIN groups g ON g.id = a.group_id
+      WHERE a.student_id = $1
+      ORDER BY a.lesson_date DESC;`;
+		const paymentsSql = `SELECT
+      p.amount,
+      p.paid_at,
+      g.name AS group_name
+      FROM payments p
+      LEFT JOIN groups g ON g.id = p.group_id
+      WHERE p.student_id = $1
+      ORDER BY p.paid_at DESC;`;
+
+		const student = await pool.query(studentSql, [id]);
+		const attendance = await pool.query(attendanceSql, [id]);
+		const payments = await pool.query(paymentsSql, [id]);
+
+		res.json({
+			student: student.rows[0],
+			attendance: attendance.rows,
+			payments: payments.rows,
+		});
+	}
+}
+
+export default new Student_Controller();

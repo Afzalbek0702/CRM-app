@@ -1,0 +1,14 @@
+import { Router } from "express";
+const router = Router();
+import dashboardController from "../controller/dashboard-controller.js";
+import { requireRole } from "../lib/roleMiddleware.js";
+
+// GET /api/dashboard/monthly-income?from=2025-08-01&to=2026-01-31
+router.get(
+	"/monthly-income",
+	requireRole("admin", "manager"),
+	dashboardController.getMonthlyIncome,
+);
+router.get("/top-debtors", requireRole("admin", "manager"), dashboardController.getTopDebtors);
+
+export default router;
