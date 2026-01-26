@@ -10,5 +10,6 @@ router.get(
 	dashboardController.getMonthlyIncome,
 );
 router.get("/top-debtors", requireRole("admin", "manager"), dashboardController.getTopDebtors);
+router.get("/today-lessons", requireRole("admin", "manager"), dashboardController.getTodayLessons);
 
 export default router;
